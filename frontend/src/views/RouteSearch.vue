@@ -1,13 +1,13 @@
 <template>
-  <div>
+  <div class="search-page">
+    <div class="results" v-loading="loading">
+      <el-empty v-if="!loading && results.length === 0" description="请输入查询，如：三亚 5 日游" />
+      <SearchResultCard v-for="h in results" :key="h.id" :hit="h" />
+    </div>
     <div class="search-bar">
       <el-input v-model="query" placeholder="搜索线路，如：三亚 5 日游" class="q" @keyup.enter="doSearch" />
       <el-input v-model="region" placeholder="地区（可选）" class="city" @keyup.enter="doSearch" />
       <el-button type="primary" @click="doSearch">搜索</el-button>
-    </div>
-    <div v-loading="loading">
-      <el-empty v-if="!loading && results.length === 0" description="暂无结果，请输入查询" />
-      <SearchResultCard v-for="h in results" :key="h.id" :hit="h" />
     </div>
   </div>
 </template>
@@ -45,10 +45,22 @@ watch([query, region], () => {
 </script>
 
 <style scoped>
+.search-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 .search-bar {
+  flex-shrink: 0;
   display: flex;
   gap: 12px;
-  margin-bottom: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
 }
 .q {
   flex: 1;
