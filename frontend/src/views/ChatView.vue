@@ -14,7 +14,9 @@
         </div>
       </div>
     </div>
-    <ChatPanel :messages="messages" :is-streaming="isStreaming" @send="send" />
+    <div class="chat-area">
+      <ChatPanel :messages="messages" :is-streaming="isStreaming" @send="send" />
+    </div>
   </div>
 </template>
 
@@ -109,19 +111,29 @@ onMounted(loadSessions)
 .chat-view {
   display: flex;
   gap: 16px;
-  height: calc(100vh - 120px);
+  height: 100%;
+  overflow: hidden;
 }
 .sidebar {
   width: 220px;
+  flex-shrink: 0;
   border-right: 1px solid #e5e7eb;
   padding-right: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.chat-area {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
 }
 .new-btn {
   width: 100%;
   margin-bottom: 12px;
 }
 .session-list {
-  max-height: calc(100vh - 180px);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 .session-item {

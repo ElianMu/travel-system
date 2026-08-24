@@ -53,7 +53,7 @@ watch(
 .chat-panel {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 120px);
+  height: 100%;
 }
 .messages {
   flex: 1;
@@ -64,6 +64,7 @@ watch(
   border: 1px solid #e5e7eb;
 }
 .input {
+  flex-shrink: 0;
   display: flex;
   gap: 12px;
   margin-top: 12px;

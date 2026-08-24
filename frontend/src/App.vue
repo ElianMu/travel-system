@@ -11,7 +11,7 @@
         <el-menu-item index="/admin/documents">元数据管理</el-menu-item>
       </el-menu>
     </el-header>
-    <el-main>
+    <el-main class="main">
       <router-view v-slot="{ Component }">
         <keep-alive>
           <component :is="Component" />
@@ -22,13 +22,24 @@
 </template>
 
 <style>
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
 .layout {
   height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 .header {
+  height: 60px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   border-bottom: 1px solid #e5e7eb;
+  padding: 0 20px;
 }
 .logo {
   font-weight: 700;
@@ -39,5 +50,15 @@
 .menu {
   flex: 1;
   border-bottom: none;
+}
+.main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
+}
+.main > * {
+  height: 100%;
+  overflow: auto;
 }
 </style>
