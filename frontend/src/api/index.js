@@ -7,6 +7,8 @@ export const importDocument = (formData) =>
   request.post('/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 export const getImportTask = (id) => request.get(`/import/tasks/${id}`)
 export const listDocuments = (params) => request.get('/documents', { params })
+export const getDocumentDetail = (id) => request.get(`/documents/${id}`)
+export const deleteDocument = (id) => request.delete(`/documents/${id}`)
 
 export const chat = (data) => request.post('/chat', data)
 export const listSessions = () => request.get('/sessions')

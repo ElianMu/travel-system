@@ -1,9 +1,9 @@
 """检索接口。"""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
-from app.models import Document, SessionLocal
+from app.models import Chunk, Document, SessionLocal
 from app.services import search_service
 
 router = APIRouter(tags=["search"])
@@ -57,3 +57,54 @@ def documents(
     ]
     db.close()
     return {"documents": result}
+
+
+@router.get("/documents/{doc_id}")
+def document_detail(doc_id: int) -> dict:
+    """文档详情（元数据 + 片段列表）。"""
+    db = SessionLocal()
+    doc = db.get(Document, doc_id)
+    if doc is None:
+        db.close()
+        raise HTTPException(status_code=404, detail="文档不存在")
+    chunks = (
+        db.query(Chunk)
+        .filter(Chunk.document_id == doc_id)
+        .order_by(Chunk.chunk_index)
+        .all()
+    )
+    result = {
+        "id": doc.id,
+        "source_file": doc.source_file,
+        "source_path": doc.source_path,
+        "content_type": doc.content_type,
+        "region": doc.region,
+        "name": doc.name,
+        "theme": doc.theme,
+        "status": doc.status,
+        "chunks": [
+            {"chunk_index": c.chunk_index, "heading_path": c.heading_path, "content": c.content}
+            for c in chunks
+        ],
+    }
+    db.close()
+    return result
+
+
+@router.delete("/documents/{doc_id}")
+def delete_document(doc_id: int) -> dict:
+    """删除文档（元数据 + 片段 + 向量）。"""
+    db = SessionLocal()
+    doc = db.get(Document, doc_id)
+    if doc is None:
+        db.close()
+        raise HTTPException(status_code=404, detail="文档不存在")
+    db.query(Chunk).filter(Chunk.document_id == doc_id).delete()
+    db.delete(doc)
+    db.commit()
+    db.close()
+
+    from app.rag.store import get_vector_store
+
+    get_vector_store().delete_by_document(doc_id)
+    return {"ok": True}
