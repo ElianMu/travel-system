@@ -1,11 +1,12 @@
-"""LLM 生成 + 引用（对应 TDD §5.7）。"""
+"""LLM 生成 + 引用 + 查询改写（对应 TDD §5.7、§7.2）。"""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, AsyncIterator
 
 from app.config import settings
-from app.rag.prompts import SYSTEM_PROMPT, build_user_prompt
+from app.rag.prompts import QUERY_REWRITE_PROMPT, SYSTEM_PROMPT, build_user_prompt
 
 _client = None
 
@@ -48,18 +49,63 @@ def generate(query: str, context_hits: list[dict[str, Any]]) -> Answer:
     )
     text = (resp.choices[0].message.content or "").strip()
 
-    return Answer(text=text, citations=_build_citations(context_hits))
+    return Answer(text=text, citations=build_citations(context_hits))
 
 
-def _format_context(hits: list[dict[str, Any]]) -> str:
-    """格式化检索片段为参考资料文本。"""
-    parts = []
-    for i, hit in enumerate(hits, 1):
-        parts.append(f"[{i}] {hit.get('content', '')}")
-    return "\n\n".join(parts)
+async def stream_generate(
+    query: str, context_hits: list[dict[str, Any]]
+) -> AsyncIterator[str]:
+    """流式生成，逐 token yield（异步 httpx，避免与 torch/chromadb 原生库冲突）。"""
+    import httpx
+
+    context = _format_context(context_hits)
+    prompt = build_user_prompt(query, context)
+    url = settings.deepseek_base_url.rstrip("/") + "/chat/completions"
+    payload = {
+        "model": settings.deepseek_model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.1,
+        "stream": True,
+    }
+    async with httpx.AsyncClient(timeout=60) as client:
+        async with client.stream(
+            "POST",
+            url,
+            headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
+            json=payload,
+        ) as resp:
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: ") or line == "data: [DONE]":
+                    continue
+                try:
+                    data = json.loads(line[6:])
+                except json.JSONDecodeError:
+                    continue
+                if data.get("choices"):
+                    delta = data["choices"][0].get("delta", {}).get("content", "")
+                    if delta:
+                        yield delta
 
 
-def _build_citations(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def rewrite_query(question: str, history: list[dict[str, Any]]) -> str:
+    """多轮查询改写（结合历史补全指代）。"""
+    history_text = _format_history(history)
+    prompt = QUERY_REWRITE_PROMPT.format(history=history_text, question=question)
+
+    client = _get_client()
+    resp = client.chat.completions.create(
+        model=settings.deepseek_model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+    )
+    rewritten = (resp.choices[0].message.content or "").strip()
+    return rewritten or question
+
+
+def build_citations(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """从命中片段提取引用来源。"""
     return [
         {
@@ -69,3 +115,18 @@ def _build_citations(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for hit in hits
     ]
+
+
+def _format_context(hits: list[dict[str, Any]]) -> str:
+    """格式化检索片段为参考资料文本。"""
+    parts = [f"[{i}] {hit.get('content', '')}" for i, hit in enumerate(hits, 1)]
+    return "\n\n".join(parts)
+
+
+def _format_history(history: list[dict[str, Any]]) -> str:
+    """格式化对话历史（最近 6 条）。"""
+    parts = []
+    for m in history[-6:]:
+        role = "用户" if m.get("role") == "user" else "助手"
+        parts.append(f"{role}：{m.get('content', '')}")
+    return "\n".join(parts)

@@ -12,6 +12,10 @@ def _get_model():
     """延迟加载本地 Embedding 模型（缓存，仅加载一次）。"""
     global _model
     if _model is None:
+        import torch
+
+        torch.set_num_threads(1)  # 避免 OpenMP 多线程在后台线程中死锁/段错误
+
         from sentence_transformers import SentenceTransformer
 
         # 优先使用本地模型路径，避免联网下载

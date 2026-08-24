@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import threading
 from datetime import datetime
 
 from app.models import Chunk, Document, ImportTask, SessionLocal
@@ -14,7 +13,11 @@ from app.rag.store import get_vector_store
 
 
 def import_document(file_path: str, source_file: str | None = None) -> int:
-    """创建导入任务并后台执行，返回任务 ID。"""
+    """创建导入任务并同步执行，返回任务 ID。
+
+    同步执行（而非后台线程）：torch 与 pymysql 在后台线程中存在原生库冲突（段错误），
+    主线程同步执行可稳定规避。任务状态仍记录于 import_tasks 表，可查询。
+    """
     name = source_file or os.path.basename(file_path)
     db = SessionLocal()
     task = ImportTask(file_name=name, status="created")
@@ -24,11 +27,7 @@ def import_document(file_path: str, source_file: str | None = None) -> int:
     task_id = task.id
     db.close()
 
-    # 后台线程执行导入，避免阻塞请求；任务间相互隔离
-    thread = threading.Thread(
-        target=_run_import, args=(task_id, file_path, name), daemon=True
-    )
-    thread.start()
+    _run_import(task_id, file_path, name)
     return task_id
 
 

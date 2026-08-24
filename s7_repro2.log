@@ -1,0 +1,7 @@
+1. Chroma ≥ı ºªØ count: 16
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|®Ä®Ä®Ä®Ä®Ä®Ä®Ä®Ä®Ä®Ä| 199/199 [00:00<00:00, 7366.09it/s]
+2. embed ok dim 768
+3. query ok
+4. retrieve ok hits 3
+5. stream ok len 336
+ALL OK

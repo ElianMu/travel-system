@@ -1,0 +1,5 @@
+1. Chroma 先初始化, count: 16
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 11373.65it/s]
+2. torch 后加载, dim: 768
+3. Chroma query 结果: 3
+ALL OK

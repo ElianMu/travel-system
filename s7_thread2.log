@@ -1,0 +1,5 @@
+worker embed 开始
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 6985.01it/s]
+worker embed ok, 数量 16
+线程存活(True=死锁): False
+DONE

@@ -1,0 +1,15 @@
+1. session_service ok
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|¨€¨€¨€¨€¨€¨€¨€¨€¨€¨€| 199/199 [00:00<00:00, 14948.27it/s]
+2. embed ok
+Traceback (most recent call last):
+  File "<string>", line 20, in <module>
+    d = json.loads(line[6:])
+  File "C:\Python314\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 2 (char 1)

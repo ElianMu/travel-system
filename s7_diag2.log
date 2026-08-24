@@ -1,0 +1,6 @@
+1. pymysql import ok
+2. create_engine ok
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|¨€¨€¨€¨€¨€¨€¨€¨€¨€¨€| 199/199 [00:00<00:00, 5693.69it/s]
+3. embed ok
+4. query ok, ids: 3
+ALL OK
