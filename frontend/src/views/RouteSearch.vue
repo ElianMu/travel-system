@@ -13,7 +13,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onActivated } from 'vue'
 import { searchRoutes } from '../api'
 import SearchResultCard from '../components/SearchResultCard.vue'
 
@@ -41,6 +41,10 @@ watch([query, region], () => {
   }
   clearTimeout(timer)
   timer = setTimeout(doSearch, 400)
+})
+
+onActivated(() => {
+  results.value = []
 })
 </script>
 
