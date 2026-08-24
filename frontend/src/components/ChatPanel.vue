@@ -37,7 +37,11 @@ function send() {
 }
 
 watch(
-  () => props.messages.length,
+  () => {
+    // 同时监听消息条数与最后一条内容长度，流式增量时也能滚动到底部
+    const last = props.messages[props.messages.length - 1]
+    return props.messages.length * 100000 + (last ? last.content.length : 0)
+  },
   async () => {
     await nextTick()
     if (msgRef.value) msgRef.value.scrollTop = msgRef.value.scrollHeight

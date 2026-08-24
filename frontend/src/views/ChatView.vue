@@ -42,6 +42,7 @@ async function newSession() {
 }
 
 async function selectSession(id) {
+  if (isStreaming.value) return
   sessionId.value = id
   const data = await getMessages(id)
   messages.value = (data.messages || []).map((m) => ({

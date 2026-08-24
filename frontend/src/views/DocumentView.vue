@@ -17,7 +17,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { listDocuments } from '../api'
 
 const documents = ref([])
@@ -37,6 +37,16 @@ async function load() {
     loading.value = false
   }
 }
+
+let timer = null
+watch(
+  filters,
+  () => {
+    clearTimeout(timer)
+    timer = setTimeout(load, 400)
+  },
+  { deep: true },
+)
 
 onMounted(load)
 </script>
