@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes import import_, search
+from app.api.routes import chat, import_, search
 from app.config import settings
 from app.models import init_db
 
@@ -31,5 +31,6 @@ def health() -> dict:
 
 app.include_router(import_.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
+app.include_router(chat.router, prefix="/api/v1")
 
-# 后续阶段挂载路由：chat / session
+# 后续阶段挂载路由：session
