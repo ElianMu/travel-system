@@ -35,10 +35,9 @@ async function loadSessions() {
 }
 
 async function newSession() {
-  const s = await createSession('新对话')
-  sessionId.value = s.session_id
+  // 新建空白会话：清空当前，输入第一个问题后才真正创建（豆包式交互）
+  sessionId.value = null
   messages.value = []
-  await loadSessions()
 }
 
 async function selectSession(id) {
@@ -62,17 +61,20 @@ async function removeSession(id) {
 }
 
 async function send(query) {
+  // 无当前会话时，用第一个问题作为标题创建会话
   if (!sessionId.value) {
-    const s = await createSession('新对话')
+    const title = query.length > 20 ? query.slice(0, 20) + '…' : query
+    const s = await createSession(title)
     sessionId.value = s.session_id
     await loadSessions()
   }
 
   messages.value.push({ role: 'user', content: query })
-  const assistant = { role: 'assistant', content: '', citations: [] }
-  messages.value.push(assistant)
-  isStreaming.value = true
+  messages.value.push({ role: 'assistant', content: '', citations: [] })
+  // 从响应式数组取回代理对象，避免修改原始对象导致不渲染
+  const assistant = messages.value[messages.value.length - 1]
 
+  isStreaming.value = true
   try {
     await chatStream(
       { query, sessionId: sessionId.value },
