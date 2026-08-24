@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from app.config import settings
@@ -14,7 +15,7 @@ _vector_store: "VectorStore | None" = None
 
 
 class VectorStore:
-    """向量库访问封装。"""
+    """向量库访问封装（写操作线程安全）。"""
 
     def __init__(self) -> None:
         import chromadb
@@ -30,6 +31,7 @@ class VectorStore:
             name=COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},
         )
+        self._lock = threading.Lock()
 
     def add(
         self,
@@ -39,12 +41,13 @@ class VectorStore:
         metadatas: list[dict[str, Any]],
     ) -> None:
         """写入向量片段（含 metadata）。"""
-        self._collection.add(
-            ids=ids,
-            documents=documents,
-            embeddings=embeddings,
-            metadatas=metadatas,
-        )
+        with self._lock:
+            self._collection.add(
+                ids=ids,
+                documents=documents,
+                embeddings=embeddings,
+                metadatas=metadatas,
+            )
 
     def query(
         self,
@@ -63,7 +66,8 @@ class VectorStore:
 
     def delete_by_document(self, document_id: int) -> None:
         """按文档删除向量片段。"""
-        self._collection.delete(where={"document_id": document_id})
+        with self._lock:
+            self._collection.delete(where={"document_id": document_id})
 
     def count(self) -> int:
         """片段总数。"""
