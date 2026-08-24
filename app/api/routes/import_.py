@@ -6,6 +6,7 @@ import shutil
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from app.core.security import is_allowed_path
 from app.services.import_service import get_task, import_document
 
 router = APIRouter(tags=["import"])
@@ -19,6 +20,8 @@ async def upload_document(file: UploadFile = File(...)) -> dict:
     os.makedirs(_UPLOAD_DIR, exist_ok=True)
     filename = os.path.basename(file.filename or "upload.md")
     saved_path = os.path.join(_UPLOAD_DIR, filename)
+    if not is_allowed_path(saved_path):
+        raise HTTPException(status_code=400, detail="非法文件路径")
     with open(saved_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 

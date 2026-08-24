@@ -1,11 +1,15 @@
 """景文智核 · 智能旅游知识库系统 — 应用入口。"""
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from app.api.routes import chat, import_, search, session
 from app.config import settings
+from app.core.logging import setup_logging, trace_id_var
 from app.models import init_db
+
+setup_logging()
 
 
 @asynccontextmanager
@@ -28,6 +32,16 @@ app = FastAPI(
     description="面向旅游场景的检索增强生成（RAG）知识库系统",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def trace_id_middleware(request: Request, call_next):
+    """为每个请求注入 trace_id，贯通结构化日志。"""
+    trace_id = request.headers.get("X-Trace-Id") or uuid.uuid4().hex[:16]
+    trace_id_var.set(trace_id)
+    response = await call_next(request)
+    response.headers["X-Trace-Id"] = trace_id
+    return response
 
 
 @app.get("/health", tags=["system"])
