@@ -42,14 +42,14 @@
                               │ 依赖向下
 ┌─────────────────────────────────────────────────────────────┐
 │                  基础设施层（Infrastructure）                 │
-│  Chroma 向量库 │ MySQL │ 文件存储 │ LLM/Embedding/联网搜索客户端 │
+│  numpy 向量索引 │ MySQL │ 文件存储 │ LLM/Embedding/联网搜索客户端 │
 └─────────────────────────────────────────────────────────────┘
        横切关注点：日志 / 链路追踪 / 指标 / 配置 / 异常处理 / 鉴权
 ```
 
 ### 2.2 依赖方向
 
-依赖严格自上而下：接入层 → 应用服务层 → RAG 编排层 → 基础设施层。领域层不反向依赖接入层；基础设施层通过接口抽象（Port/Adapter）供上层调用，保证可替换（如 Chroma 替换为 Milvus、本机 MySQL 替换为云托管 RDS）。
+依赖严格自上而下：接入层 → 应用服务层 → RAG 编排层 → 基础设施层。领域层不反向依赖接入层；基础设施层通过接口抽象（Port/Adapter）供上层调用，保证可替换（如 numpy 索引替换为 Milvus、本机 MySQL 替换为云托管 RDS）。
 
 ## 3. 技术选型
 
@@ -58,9 +58,9 @@
 | 语言 | Python | 3.11 | 生态成熟，RAG/ML 库丰富 |
 | Web 框架 | FastAPI | 0.115.x | 原生 async、OpenAPI 自动生成、SSE 友好 |
 | ASGI 服务 | uvicorn | 0.32.x | 高性能 ASGI 服务 |
-| RAG 编排 | LangChain + langchain-community | 0.3.x | 文档加载/切分/检索器抽象成熟 |
-| LLM 接入 | langchain-openai（兼容协议） | 0.3.x | DeepSeek（deepseek-chat），OpenAI 兼容可平滑切换 |
-| 向量库 | ChromaDB（chromadb） | 1.5.x | 本地持久化，生产可升级 Milvus |
+| RAG 编排 | 自研轻量 RAG（loader/splitter/retriever） | - | 流程清晰可控，无框架黑盒 |
+| LLM 接入 | openai SDK + httpx（兼容协议） | 1.x | DeepSeek（deepseek-chat），流式用异步 httpx |
+| 向量库 | numpy 本地索引 | 1.26 | 余弦暴力检索，数百 chunk 规模毫秒级 |
 | Embedding | BAAI/bge-base-zh-v1.5 | - | 中文效果佳、768 维、本地部署数据安全 |
 | 联网搜索 | Tavily | - | 知识库无结果时联网兜底 |
 | ORM | SQLAlchemy | 2.0.x | 屏蔽关系库差异，便于替换 |
@@ -111,7 +111,7 @@
 ├── data/                       # 来源文档
 ├── knowledge_base/             # 本地知识库文档目录
 ├── models/                     # 本地 Embedding 模型（bge-base-zh-v1.5）
-├── storage/                    # 向量库持久化目录（ChromaDB）
+├── storage/                    # 向量索引持久化（numpy .npz）
 ├── tests/                      # 测试与评估集
 ├── pyproject.toml
 ├── .env.example
@@ -175,8 +175,8 @@
 
 ### 5.5 store（向量库）
 
-- 职责：Chroma Collection 的写入、删除、按文档清理、检索。
-- Collection：`travel_kb`，metadata 含 `document_id`、`content_type`、`region`、`name`、`heading_path`、`source_file`。
+- 职责：numpy 向量索引的写入、删除、按文档清理、余弦检索。
+- 持久化：`storage/vector_index.npz`，metadata 含 `document_id`、`content_type`、`region`、`name`、`heading_path`、`source_file`。
 - 支持按元数据过滤（如 `content_type == '景点介绍'`）。
 
 ### 5.6 retriever（向量检索 + 元数据过滤 + 联网兜底）
@@ -188,6 +188,7 @@
 ### 5.7 generator（LLM 生成 + 引用）
 
 - 职责：以检索片段为上下文，调用 LLM 生成答案，并强制附带引用来源。
+- 非流式用 openai SDK（stream=False）；流式用异步 httpx 读取 SSE（规避同步流式与 torch 的原生库冲突）。
 - 输出：`Answer(text, citations)`，citations 含 `source_file`、`heading_path`、`chunk_id`、原文摘要。
 
 ### 5.8 应用服务层
@@ -210,9 +211,11 @@
   3. Normalizer 抽取并规范化元数据，写入 documents 表
   4. Splitter 结构化切分
   5. Embedder 批量向量化
-  6. Store 写入 Chroma（含 metadata）
+  6. Store 写入 numpy 索引（含 metadata）
   7. 更新任务 status=success / 记录错误
 异常：任一步失败 → status=failed + error_message，不影响其他任务（BR-004）
+
+> 说明：导入采用**同步执行**（主线程），并在应用启动时**预热 Embedding 模型**，规避 torch 与 pymysql 在 Windows 下的原生库冲突（段错误）；向量化设置 `torch.set_num_threads(1)` 避免 OpenMP 多线程死锁。
 ```
 
 ### 6.2 问答流程（时序）
@@ -397,10 +400,10 @@ CREATE TABLE messages (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-### 10.2 向量库（Chroma）
+### 10.2 向量库（numpy 本地索引）
 
-- Collection：`travel_kb`
-- 每条记录：`id=chunk_id`，`embedding`（768 维），`document`（片段文本），`metadata`（document_id、content_type、region、name、heading_path、source_file）。
+- 持久化：`storage/vector_index.npz`，含 ids、documents、embeddings（768 维）、metadatas 四个数组。
+- 检索：向量已归一化，点积即余弦相似度，暴力排序取 Top-K，支持元数据过滤。
 
 ## 11. 关键设计决策（ADR）
 
@@ -408,16 +411,16 @@ CREATE TABLE messages (
 - 决策：以检索增强生成实现知识问答。
 - 理由：知识持续更新，RAG 无需重训即可扩展内容；答案可追溯引用，符合可解释性需求。放弃微调（成本高、更新不便）。
 
-**ADR-002 向量库选 ChromaDB，预留 Milvus 升级路径**
-- 决策：使用 ChromaDB 1.5.x 本地持久化，通过 `store.py` 接口抽象隔离。
-- 理由：ChromaDB 零运维、易上手，适合本机落地；数据规模增长后切换 Milvus 仅需替换 Adapter。放弃直接上 Milvus（一期运维成本高）。
+**ADR-002 向量库选 numpy 本地索引，预留 Milvus 升级路径**
+- 决策：使用 numpy 本地索引（余弦暴力检索），通过 `store.py` 接口抽象隔离。
+- 理由：chromadb 1.5.x 在 Windows 下存在段错误、0.5.x 无法在 Python 3.14 安装；numpy 零依赖、稳定，数百 chunk 规模暴力检索毫秒级。数据规模增长后切换 Milvus 仅需替换 Adapter。
 
 **ADR-003 Embedding 选 bge-base-zh-v1.5 本地部署**
 - 决策：本地加载 bge-base-zh-v1.5 生成 768 维向量。
 - 理由：中文语义效果佳，本地化保障数据安全与零 API 成本。放弃纯在线 Embedding API（数据外发、成本随规模增长）。
 
 **ADR-004 LLM 采用 OpenAI 兼容接口**
-- 决策：通过 langchain-openai 兼容协议接入，Base URL / 模型名可配置。
+- 决策：通过 openai SDK（OpenAI 兼容协议）接入，Base URL / 模型名可配置。
 - 理由：DeepSeek、Qwen 等主流模型均提供 OpenAI 兼容接口，便于切换与降级。放弃绑定单一厂商 SDK。
 
 **ADR-005 结构化切分而非固定长度切分**
@@ -474,7 +477,7 @@ CREATE TABLE messages (
 
 ### 12.7 运行与运维
 
-- 本机裸跑：`pip install` + `uvicorn` 直接启动，依赖本机 MySQL 与本地 ChromaDB，无容器编排。
+- 本机裸跑：`pip install` + `uvicorn` 直接启动，依赖本机 MySQL 与本地 numpy 向量索引，无容器编排。
 - 配置分层：`.env`（密钥）→ 环境变量 → 配置文件，区分 dev/prod，密钥不入库、不入代码。
 - 优雅停机：ASGI 服务监听 SIGTERM，完成在途请求后退出。
 - 生产化预留：基础设施层通过 Port/Adapter 抽象，未来可平滑切换容器化（Docker）或云托管（RDS、Milvus、OSS）而不改业务代码。
@@ -490,7 +493,7 @@ CREATE TABLE messages (
 | EMBEDDING_MODEL | 向量模型 | BAAI/bge-base-zh-v1.5 |
 | EMBEDDING_MODEL_PATH | 向量模型本地路径 | ./models/models--BAAI--bge-base-zh-v1.5/... |
 | KNOWLEDGE_BASE_DIR | 知识库文档目录 | ./knowledge_base |
-| VECTOR_STORE_DIR | 向量库目录（ASCII 路径） | /绝对路径/chroma |
+| VECTOR_STORE_DIR | 向量索引文件路径 | storage/vector_index.npz |
 | MYSQL_HOST / MYSQL_PORT / MYSQL_USER / MYSQL_PASSWORD / MYSQL_DATABASE | 数据库连接 | localhost / 3300 / root / *** / travel_kb |
 | RETRIEVE_TOP_K | 召回数量 | 5 |
 
@@ -530,7 +533,7 @@ curl -X POST http://localhost:8000/api/v1/import \
 | 阶段 | 任务 | 依赖 |
 |------|------|------|
 | S0 | 项目初始化、配置、目录骨架 | - |
-| S1 | 数据层（ORM 模型、MySQL、Chroma 封装） | S0 |
+| S1 | 数据层（ORM 模型、MySQL、numpy 向量索引） | S0 |
 | S2 | 文档加载与元数据规范化 | S1 |
 | S3 | 切分与向量化 | S2 |
 | S4 | 导入任务编排与失败隔离 | S3 |
