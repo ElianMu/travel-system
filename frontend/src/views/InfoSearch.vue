@@ -1,3 +1,50 @@
 <template>
-  <el-card>实用信息查询（S11 实现）</el-card>
+  <div>
+    <el-tabs v-model="type" @tab-change="doSearch">
+      <el-tab-pane label="酒店" name="hotel" />
+      <el-tab-pane label="美食" name="food" />
+      <el-tab-pane label="交通" name="transport" />
+    </el-tabs>
+    <div class="search-bar">
+      <el-input v-model="query" placeholder="搜索实用信息" class="q" @keyup.enter="doSearch" />
+      <el-button type="primary" @click="doSearch">搜索</el-button>
+    </div>
+    <div v-loading="loading">
+      <el-empty v-if="!loading && results.length === 0" description="暂无结果，请输入查询" />
+      <SearchResultCard v-for="h in results" :key="h.id" :hit="h" />
+    </div>
+  </div>
 </template>
+
+<script setup>
+import { ref } from 'vue'
+import { searchInfo } from '../api'
+import SearchResultCard from '../components/SearchResultCard.vue'
+
+const query = ref('')
+const type = ref('hotel')
+const results = ref([])
+const loading = ref(false)
+
+async function doSearch() {
+  if (!query.value) return
+  loading.value = true
+  try {
+    const data = await searchInfo({ query: query.value, type: type.value })
+    results.value = data.results || []
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+
+<style scoped>
+.search-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.q {
+  flex: 1;
+}
+</style>
