@@ -1,8 +1,0 @@
-step1: import ok
-step2: embed 模型加载中...
-Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 3873.68it/s]
-step3: embed ok, dim 768
-step4: retrieve ok, hits 3
-step5: stream 生成中...
-step6: stream ok, len 343
-ALL OK

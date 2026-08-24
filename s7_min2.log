@@ -1,5 +1,0 @@
-1. session_service ok
-2. chat_service ok
-Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|¨€¨€¨€¨€¨€¨€¨€¨€¨€¨€| 199/199 [00:00<00:00, 13697.65it/s]
-3. embed ok dim 768
-DONE

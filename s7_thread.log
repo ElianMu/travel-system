@@ -1,5 +1,0 @@
-启动后台线程导入...
-task_id: 17
-Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 6884.13it/s]
-最终 status: running processed: 0 / 16
-DONE
