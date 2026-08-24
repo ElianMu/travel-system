@@ -1,6 +1,9 @@
 <template>
   <div :class="['bubble', message.role]">
-    <div class="content">{{ message.content }}</div>
+    <div v-if="message.role === 'assistant' && !message.content" class="content thinking">
+      正在思考<span class="dots"><span>.</span><span>.</span><span>.</span></span>
+    </div>
+    <div v-else class="content">{{ message.content }}</div>
     <CitationList v-if="message.role === 'assistant' && message.citations?.length" :citations="message.citations" />
   </div>
 </template>
@@ -35,5 +38,28 @@ defineProps({ message: { type: Object, required: true } })
   max-width: 85%;
   white-space: pre-wrap;
   line-height: 1.6;
+}
+.thinking {
+  color: #909399;
+  font-style: italic;
+}
+.dots span {
+  animation: blink 1.4s infinite both;
+}
+.dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
 }
 </style>

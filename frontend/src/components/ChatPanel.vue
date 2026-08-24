@@ -11,7 +11,7 @@
         :disabled="isStreaming"
         @keyup.enter="send"
       />
-      <el-button type="primary" :loading="isStreaming" @click="send">发送</el-button>
+      <el-button type="primary" :loading="isStreaming" @click="send">{{ isStreaming ? '思考中…' : '发送' }}</el-button>
     </div>
   </div>
 </template>
