@@ -27,21 +27,22 @@ def split_body(body: str, max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE) -> list[
             chunks.append(Chunk(content=h2_text, heading_path=h2_title, chunk_index=idx))
             idx += 1
         else:
-            sub_sections = _sections(h2_text, level=3)
-            if sub_sections:
-                for h3_title, h3_text in sub_sections:
-                    if not h3_title or not h3_text.strip():
-                        # 跳过 H2 标题残留（无 H3 子标题的空 section）
-                        continue
+            for h3_title, h3_text in _sections(h2_text, level=3):
+                if h3_title:
                     path = f"{h2_title} > {h3_title}"
                     chunks.append(Chunk(content=h3_text, heading_path=path, chunk_index=idx))
                     idx += 1
-            else:
-                # 无 H3 可细分，保留整块（语义完整优先于长度）
-                chunks.append(Chunk(content=h2_text, heading_path=h2_title, chunk_index=idx))
-                idx += 1
+                elif _has_text_beyond_h2_heading(h3_text):
+                    # 首个 H3 之前的导语；没有 H3 时即整个 H2 块（语义完整优先于长度）
+                    chunks.append(Chunk(content=h3_text, heading_path=h2_title, chunk_index=idx))
+                    idx += 1
 
     return chunks
+
+
+def _has_text_beyond_h2_heading(text: str) -> bool:
+    """判断片段除 H2 标题行外是否还有正文。"""
+    return any(line.strip() and not line.startswith("## ") for line in text.splitlines())
 
 
 def _sections(text: str, level: int) -> list[tuple[str, str]]:
