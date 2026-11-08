@@ -1,11 +1,11 @@
 """向量化：本地加载 bge-base-zh-v1.5 生成 768 维向量（对应 TDD §5.4）。"""
 from __future__ import annotations
 
-import time
-
 from app.config import settings
+from app.core.resilience import call_with_resilience, embedding_breaker
 
 _model = None
+_BATCH_SIZE = 32
 
 
 def _get_model():
@@ -25,18 +25,19 @@ def _get_model():
 
 
 def embed(texts: list[str]) -> list[list[float]]:
-    """批量生成向量，失败重试（最多 3 次，指数退避）。"""
+    """批量生成向量，失败重试（最多 3 次，指数退避）并熔断。
+
+    模型在本进程内运行，同步推理无法被安全中断，因此不设调用超时。
+    """
     model = _get_model()
-    last_err: Exception | None = None
-    for attempt in range(3):
-        try:
-            embeddings = model.encode(
-                texts,
-                normalize_embeddings=True,
-                show_progress_bar=False,
-            )
-            return [embedding.tolist() for embedding in embeddings]
-        except Exception as exc:  # noqa: BLE001
-            last_err = exc
-            time.sleep(2**attempt)
-    raise RuntimeError(f"向量化失败（已重试 3 次）: {last_err}")
+
+    def encode() -> list[list[float]]:
+        embeddings = model.encode(
+            texts,
+            batch_size=_BATCH_SIZE,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return [embedding.tolist() for embedding in embeddings]
+
+    return call_with_resilience(embedding_breaker, encode)

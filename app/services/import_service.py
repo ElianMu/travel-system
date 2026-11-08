@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from typing import Any
 
+from app.core.observability import IMPORT_TASKS, tracer
 from app.models import Chunk, Document, ImportTask, SessionLocal
 from app.rag.embedder import embed
 from app.rag.loader import load_markdown
@@ -31,7 +32,9 @@ def import_document(file_path: str, source_file: str | None = None) -> int:
     task_id = task.id
     db.close()
 
-    _run_import(task_id, file_path, name)
+    with tracer.start_as_current_span("import_document") as span:
+        span.set_attribute("app.file_name", name)
+        _run_import(task_id, file_path, name)
     return task_id
 
 
@@ -106,9 +109,11 @@ def _run_import(task_id: int, file_path: str, source_file: str) -> None:
 
         for old_id in replaced_ids:
             _discard_vectors(old_id)
+        IMPORT_TASKS.labels("success").inc()
         logger.info("导入成功 file=%s chunks=%d replaced=%s", source_file, len(chunks), replaced_ids)
     except Exception as exc:  # noqa: BLE001  失败隔离：仅本任务失败，不影响其他任务与服务
         logger.exception("导入失败 file=%s", source_file)
+        IMPORT_TASKS.labels("failed").inc()
         db.rollback()
         task = db.get(ImportTask, task_id)
         if task is not None:

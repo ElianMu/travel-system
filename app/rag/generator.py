@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from app.config import settings
+from app.core.observability import tracer
+from app.core.resilience import call_with_resilience, llm_breaker, record_external_failure
 from app.rag.prompts import QUERY_REWRITE_PROMPT, SYSTEM_PROMPT, build_user_prompt
 
 _client = None
@@ -29,8 +31,21 @@ def _get_client():
         _client = OpenAI(
             base_url=settings.deepseek_base_url,
             api_key=settings.deepseek_api_key,
+            timeout=settings.llm_timeout_seconds,
+            max_retries=0,  # 重试统一由 call_with_resilience 负责
         )
     return _client
+
+
+def _complete(**kwargs: Any) -> str:
+    """调用 LLM（超时、重试、熔断），返回文本。"""
+
+    def create() -> str:
+        resp = _get_client().chat.completions.create(model=settings.deepseek_model, **kwargs)
+        return (resp.choices[0].message.content or "").strip()
+
+    with tracer.start_as_current_span("llm.complete"):
+        return call_with_resilience(llm_breaker, create)
 
 
 def generate(query: str, context_hits: list[dict[str, Any]]) -> Answer:
@@ -38,9 +53,7 @@ def generate(query: str, context_hits: list[dict[str, Any]]) -> Answer:
     context = _format_context(context_hits)
     prompt = build_user_prompt(query, context)
 
-    client = _get_client()
-    resp = client.chat.completions.create(
-        model=settings.deepseek_model,
+    text = _complete(
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
@@ -48,7 +61,6 @@ def generate(query: str, context_hits: list[dict[str, Any]]) -> Answer:
         temperature=0.1,
         stream=False,
     )
-    text = (resp.choices[0].message.content or "").strip()
 
     return Answer(text=text, citations=build_citations(context_hits))
 
@@ -56,8 +68,13 @@ def generate(query: str, context_hits: list[dict[str, Any]]) -> Answer:
 async def stream_generate(
     query: str, context_hits: list[dict[str, Any]]
 ) -> AsyncIterator[str]:
-    """流式生成，逐 token yield（异步 httpx，避免与 torch/chromadb 原生库冲突）。"""
+    """流式生成，逐 token yield（异步 httpx，避免与 torch 原生库冲突）。
+
+    失败不在此重试：由调用方降级为带重试的非流式调用。
+    """
     import httpx
+
+    llm_breaker.before_call()
 
     context = _format_context(context_hits)
     prompt = build_user_prompt(query, context)
@@ -71,25 +88,30 @@ async def stream_generate(
         "temperature": 0.1,
         "stream": True,
     }
-    async with httpx.AsyncClient(timeout=60) as client:
-        async with client.stream(
-            "POST",
-            url,
-            headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
-            json=payload,
-        ) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: ") or line == "data: [DONE]":
-                    continue
-                try:
-                    data = json.loads(line[6:])
-                except json.JSONDecodeError:
-                    continue
-                if data.get("choices"):
-                    delta = data["choices"][0].get("delta", {}).get("content", "")
-                    if delta:
-                        yield delta
+    try:
+        async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
+            async with client.stream(
+                "POST",
+                url,
+                headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
+                json=payload,
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: ") or line == "data: [DONE]":
+                        continue
+                    try:
+                        data = json.loads(line[6:])
+                    except json.JSONDecodeError:
+                        continue
+                    if data.get("choices"):
+                        delta = data["choices"][0].get("delta", {}).get("content", "")
+                        if delta:
+                            yield delta
+    except Exception as exc:
+        record_external_failure(llm_breaker, exc)
+        raise
+    llm_breaker.record_success()
 
 
 def rewrite_query(question: str, history: list[dict[str, Any]]) -> str:
@@ -97,13 +119,7 @@ def rewrite_query(question: str, history: list[dict[str, Any]]) -> str:
     history_text = _format_history(history)
     prompt = QUERY_REWRITE_PROMPT.format(history=history_text, question=question)
 
-    client = _get_client()
-    resp = client.chat.completions.create(
-        model=settings.deepseek_model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-    )
-    rewritten = (resp.choices[0].message.content or "").strip()
+    rewritten = _complete(messages=[{"role": "user", "content": prompt}], temperature=0)
     return rewritten or question
 
 

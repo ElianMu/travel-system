@@ -4,6 +4,7 @@
 """
 import os
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -20,11 +21,15 @@ class Settings(BaseSettings):
     # 应用
     app_name: str = "景文智核 · 智能旅游知识库"
     app_version: str = "0.1.0"
+    app_env: Literal["dev", "prod"] = "dev"
+    log_level: str = "INFO"
+    otel_console_export: bool = False
 
     # 大模型（OpenAI 兼容协议）
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-chat"
+    llm_timeout_seconds: float = 60.0
 
     # 联网搜索
     tavily_api_key: str = ""

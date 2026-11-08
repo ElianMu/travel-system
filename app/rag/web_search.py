@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from app.config import settings
+from app.core.resilience import call_with_resilience, web_search_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ def search(query: str, max_results: int = 3) -> list[dict[str, Any]]:
 
     import requests
 
-    try:
+    def post() -> dict[str, Any]:
         resp = requests.post(
             "https://api.tavily.com/search",
             headers={"Authorization": f"Bearer {settings.tavily_api_key}"},
@@ -24,7 +25,10 @@ def search(query: str, max_results: int = 3) -> list[dict[str, Any]]:
             timeout=15,
         )
         resp.raise_for_status()
-        data = resp.json()
+        return resp.json()
+
+    try:
+        data = call_with_resilience(web_search_breaker, post, attempts=2)
     except Exception:  # noqa: BLE001  联网失败不影响主流程
         logger.warning("联网搜索失败", exc_info=True)
         return []

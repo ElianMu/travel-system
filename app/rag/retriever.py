@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.config import settings
+from app.core.observability import RETRIEVE_LATENCY, tracer
 from app.rag import web_search
 from app.rag.embedder import embed
 from app.rag.store import get_vector_store
@@ -17,10 +18,10 @@ def retrieve(
 ) -> list[dict[str, Any]]:
     """向量检索，支持 content_type / region 元数据过滤。"""
     store = get_vector_store()
-    query_embedding = embed([query])[0]
-
-    where = _build_where(content_type, region)
-    result = store.query(query_embedding, top_k=top_k or settings.retrieve_top_k, where=where)
+    with tracer.start_as_current_span("retrieve"), RETRIEVE_LATENCY.time():
+        query_embedding = embed([query])[0]
+        where = _build_where(content_type, region)
+        result = store.query(query_embedding, top_k=top_k or settings.retrieve_top_k, where=where)
     return _parse_result(result)
 
 

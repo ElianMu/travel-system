@@ -4,8 +4,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Any, AsyncIterator
 
+from app.core.observability import FIRST_TOKEN_LATENCY
 from app.rag import generator
 from app.rag.retriever import retrieve_with_fallback
 from app.services import session_service
@@ -37,6 +39,7 @@ async def chat_stream(
     """流式问答：SSE 事件流，异常降级为非流式。"""
     full_text = ""
     citations: list[dict[str, Any]] = []
+    started = time.perf_counter()
     try:
         # 改写与向量检索是同步调用，放到线程池以免阻塞事件循环
         standalone_query = await asyncio.to_thread(_maybe_rewrite, query, session_id)
@@ -48,6 +51,8 @@ async def chat_stream(
         else:
             citations = generator.build_citations(hits)
             async for delta in generator.stream_generate(standalone_query, hits):
+                if not full_text:
+                    FIRST_TOKEN_LATENCY.observe(time.perf_counter() - started)
                 full_text += delta
                 yield _sse("token", {"delta": delta})
             if not full_text:
