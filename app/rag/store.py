@@ -140,6 +140,15 @@ class VectorStore:
             )
             self._save()
 
+    def get_document_chunks(self, document_id: int) -> list[tuple[str, str]]:
+        """按写入顺序返回文档的片段：(heading_path, 文本)。"""
+        with self._lock:
+            return [
+                (m.get("heading_path") or "", text)
+                for m, text in zip(self._metadatas, self._documents)
+                if m.get("document_id") == document_id
+            ]
+
     def count(self) -> int:
         """片段总数。"""
         with self._lock:

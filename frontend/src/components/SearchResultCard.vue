@@ -9,6 +9,14 @@
       <span v-if="hit.heading_path" class="heading">片段：{{ hit.heading_path }}</span>
     </div>
     <div class="content">{{ hit.content }}</div>
+    <el-collapse v-if="details.length" class="details">
+      <el-collapse-item title="结构化信息">
+        <div v-for="[label, value] in details" :key="label" class="detail">
+          <div class="label">{{ label }}</div>
+          <div class="value">{{ value }}</div>
+        </div>
+      </el-collapse-item>
+    </el-collapse>
     <div class="source">
       来源：{{ hit.source_file }}
       <span v-if="hit.score != null"> · 相关度 {{ hit.score }}</span>
@@ -17,7 +25,11 @@
 </template>
 
 <script setup>
-defineProps({ hit: { type: Object, required: true } })
+import { computed } from 'vue'
+
+const props = defineProps({ hit: { type: Object, required: true } })
+// 文档没有对应章节的字段为空，不展示
+const details = computed(() => Object.entries(props.hit.details || {}).filter(([, value]) => value))
 </script>
 
 <style scoped>
@@ -46,6 +58,22 @@ defineProps({ hit: { type: Object, required: true } })
   line-height: 1.6;
   max-height: 120px;
   overflow: hidden;
+}
+.details {
+  margin-top: 8px;
+}
+.detail {
+  margin-bottom: 8px;
+}
+.label {
+  font-weight: 600;
+  font-size: 13px;
+}
+.value {
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 .source {
   margin-top: 8px;
