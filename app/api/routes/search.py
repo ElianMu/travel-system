@@ -1,28 +1,37 @@
 """检索接口。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated, Literal
+
+from fastapi import APIRouter, HTTPException, Query
 
 from app.models import Chunk, Document, SessionLocal
 from app.services import search_service
 
 router = APIRouter(tags=["search"])
 
+SearchQuery = Annotated[str, Query(min_length=1, max_length=500)]
+TopK = Annotated[int | None, Query(ge=1, le=20)]
+
 
 @router.get("/search/attractions")
-def attractions(query: str, city: str | None = None, top_k: int = 5) -> dict:
+def attractions(query: SearchQuery, city: str | None = None, top_k: TopK = None) -> dict:
     """景点检索。"""
     return {"results": search_service.search_attractions(query, region=city, top_k=top_k)}
 
 
 @router.get("/search/routes")
-def routes(query: str, region: str | None = None, top_k: int = 5) -> dict:
+def routes(query: SearchQuery, region: str | None = None, top_k: TopK = None) -> dict:
     """线路检索。"""
     return {"results": search_service.search_routes(query, region=region, top_k=top_k)}
 
 
 @router.get("/search/info")
-def info(query: str, type: str = "hotel", top_k: int = 5) -> dict:
+def info(
+    query: SearchQuery,
+    type: Literal["hotel", "food", "transport"] = "hotel",
+    top_k: TopK = None,
+) -> dict:
     """实用信息检索（hotel/food/transport）。"""
     return {"results": search_service.search_info(query, info_type=type, top_k=top_k)}
 
@@ -32,16 +41,19 @@ def documents(
     content_type: str | None = None,
     region: str | None = None,
     name: str | None = None,
+    source_file: str | None = None,
 ) -> dict:
-    """元数据列表，支持 content_type/region/name 筛选。"""
+    """元数据列表，支持 content_type/region/name/source_file 筛选（后三者为模糊匹配）。"""
     db = SessionLocal()
     q = db.query(Document)
     if content_type:
         q = q.filter(Document.content_type == content_type)
     if region:
-        q = q.filter(Document.region == region)
+        q = q.filter(Document.region.contains(region, autoescape=True))
     if name:
-        q = q.filter(Document.name == name)
+        q = q.filter(Document.name.contains(name, autoescape=True))
+    if source_file:
+        q = q.filter(Document.source_file.contains(source_file, autoescape=True))
     docs = q.order_by(Document.id.desc()).limit(200).all()
     result = [
         {

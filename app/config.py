@@ -45,6 +45,8 @@ class Settings(BaseSettings):
 
     # 检索
     retrieve_top_k: int = 5
+    # 低于该相似度视为本地召回不足。样例数据实测：相关问题 ≥0.62，无关问题 ≤0.49
+    retrieve_min_score: float = 0.55
 
     @property
     def vector_index_file(self) -> str:
