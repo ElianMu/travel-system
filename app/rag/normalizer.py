@@ -7,6 +7,10 @@ from dataclasses import asdict, dataclass
 _REGION_KEYS = ("城市", "目的地")
 _NAME_KEYS = ("景点名称", "线路名称", "住宿名称", "文档名称", "餐厅名称")
 
+# 内容类型取值（BR-001）；PRD 写作「美食推荐」，样例文档写作「美食介绍」，统一为后者
+CONTENT_TYPES = ("景点介绍", "线路推荐", "酒店信息", "美食介绍", "交通指南", "文化民俗")
+_CONTENT_TYPE_ALIASES = {"美食推荐": "美食介绍"}
+
 
 @dataclass
 class NormalizedMetadata:
@@ -31,6 +35,7 @@ def normalize(
 ) -> NormalizedMetadata:
     """将来源元数据映射为规范 schema，缺失字段填空字符串。"""
     content_type = metadata_raw.get("内容类型", "")
+    content_type = _CONTENT_TYPE_ALIASES.get(content_type, content_type)
     theme = metadata_raw.get("主题", "")
 
     region = ""
