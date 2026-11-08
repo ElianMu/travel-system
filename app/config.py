@@ -2,6 +2,7 @@
 
 字段命名与 .env 中的键一一对应（pydantic-settings 默认大小写不敏感）。
 """
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-base-zh-v1.5"
     embedding_model_path: str = ""
     knowledge_base_dir: str = "./knowledge_base"
-    vector_store_dir: str = "./storage/chroma"
+    vector_store_dir: str = "./storage"  # 目录，或以 .npz 结尾的索引文件路径
 
     # 数据库（MySQL）
     mysql_host: str = "localhost"
@@ -44,6 +45,14 @@ class Settings(BaseSettings):
 
     # 检索
     retrieve_top_k: int = 5
+
+    @property
+    def vector_index_file(self) -> str:
+        """numpy 向量索引文件路径。"""
+        location = self.vector_store_dir or "./storage"
+        if location.endswith(".npz"):
+            return location
+        return os.path.join(location, "vector_index.npz")
 
     @property
     def database_url(self) -> str:
