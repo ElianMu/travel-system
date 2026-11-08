@@ -4,6 +4,8 @@
     <div class="tags">
       <el-tag v-if="hit.content_type" size="small">{{ hit.content_type }}</el-tag>
       <el-tag v-if="hit.region" size="small" type="success">{{ hit.region }}</el-tag>
+      <el-tag v-if="hit.source === 'web'" size="small" type="warning">联网结果</el-tag>
+      <span v-if="hit.theme" class="heading">主题：{{ hit.theme }}</span>
       <span v-if="hit.heading_path" class="heading">片段：{{ hit.heading_path }}</span>
     </div>
     <div class="content">{{ hit.content }}</div>
@@ -30,6 +32,7 @@ defineProps({ hit: { type: Object, required: true } })
 .tags {
   margin-bottom: 8px;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
