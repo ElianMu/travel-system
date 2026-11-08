@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     app_env: Literal["dev", "prod"] = "dev"
     log_level: str = "INFO"
     otel_console_export: bool = False
+    api_key: str = ""  # 接口鉴权（X-API-Key），为空时不启用，生产环境必填
 
     # 大模型（OpenAI 兼容协议）
     deepseek_base_url: str = "https://api.deepseek.com"
@@ -60,6 +61,8 @@ class Settings(BaseSettings):
         """生产环境缺少密钥时启动即失败，而不是等到第一次问答才报错。"""
         if self.app_env == "prod" and not self.deepseek_api_key:
             raise ValueError("生产环境必须通过环境变量提供 DEEPSEEK_API_KEY")
+        if self.app_env == "prod" and not self.api_key:
+            raise ValueError("生产环境必须通过环境变量提供 API_KEY")
         return self
 
     @property

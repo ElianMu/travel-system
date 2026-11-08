@@ -4,9 +4,10 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from app.api.deps import require_api_key
 from app.api.routes import chat, import_, search, session
 from app.config import settings
 from app.core.errors import register_exception_handlers
@@ -88,7 +89,5 @@ def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-app.include_router(import_.router, prefix="/api/v1")
-app.include_router(search.router, prefix="/api/v1")
-app.include_router(chat.router, prefix="/api/v1")
-app.include_router(session.router, prefix="/api/v1")
+for module in (import_, search, chat, session):
+    app.include_router(module.router, prefix="/api/v1", dependencies=[Depends(require_api_key)])

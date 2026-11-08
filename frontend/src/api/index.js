@@ -1,4 +1,4 @@
-import request from './request'
+import request, { AUTH_HEADERS } from './request'
 
 export const searchAttractions = (params) => request.get('/search/attractions', { params })
 export const searchRoutes = (params) => request.get('/search/routes', { params })
@@ -23,7 +23,7 @@ export const deleteSession = (sessionId) => request.delete(`/sessions/${sessionI
 export async function chatStream({ query, sessionId }, onToken, onCitations, onFallbackAnswer) {
   const resp = await fetch('/api/v1/chat/stream', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...AUTH_HEADERS },
     body: JSON.stringify({ query, session_id: sessionId }),
   })
   if (!resp.ok) throw new Error(`流式接口返回 ${resp.status}`)

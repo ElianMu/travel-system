@@ -2,16 +2,31 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from app.config import settings
 from app.core.observability import tracer
-from app.core.resilience import call_with_resilience, llm_breaker, record_external_failure
-from app.rag.prompts import QUERY_REWRITE_PROMPT, SYSTEM_PROMPT, build_user_prompt
+from app.core.resilience import (
+    ExternalServiceError,
+    call_with_resilience,
+    llm_breaker,
+    record_external_failure,
+)
+from app.rag.prompts import (
+    METADATA_EXTRACT_PROMPT,
+    QUERY_REWRITE_PROMPT,
+    SYSTEM_PROMPT,
+    build_user_prompt,
+)
+
+logger = logging.getLogger(__name__)
 
 _client = None
 _EXCERPT_LENGTH = 120
+_EXTRACT_MAX_CHARS = 3000  # 元数据集中在文档开头，无需整篇发送
+_EXTRACT_TIMEOUT_SECONDS = 20.0  # 导入同步执行，缩短单次等待以免长时间阻塞服务
 
 
 @dataclass
@@ -46,6 +61,26 @@ def _complete(**kwargs: Any) -> str:
 
     with tracer.start_as_current_span("llm.complete"):
         return call_with_resilience(llm_breaker, create)
+
+
+def extract_metadata(content: str) -> dict[str, Any]:
+    """LLM 兜底抽取元数据（TDD §7.3）；失败时返回空字典，由调用方按字段缺失处理。"""
+    if not settings.deepseek_api_key:
+        return {}
+    prompt = METADATA_EXTRACT_PROMPT.format(content=content[:_EXTRACT_MAX_CHARS])
+    try:
+        data = json.loads(
+            _complete(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                response_format={"type": "json_object"},
+                timeout=_EXTRACT_TIMEOUT_SECONDS,
+            )
+        )
+    except (ExternalServiceError, json.JSONDecodeError) as exc:
+        logger.warning("元数据 LLM 兜底失败：%s", exc)
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def generate(query: str, context_hits: list[dict[str, Any]]) -> Answer:

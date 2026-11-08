@@ -9,8 +9,9 @@ from typing import Any
 from app.core.observability import IMPORT_TASKS, tracer
 from app.models import Chunk, Document, ImportTask, SessionLocal
 from app.rag.embedder import embed
-from app.rag.loader import load_markdown
-from app.rag.normalizer import CONTENT_TYPES, normalize
+from app.rag.generator import extract_metadata
+from app.rag.loader import LoadedDocument, load_markdown
+from app.rag.normalizer import CONTENT_TYPES, fill_missing, needs_llm_fallback, normalize
 from app.rag.splitter import split_body
 from app.rag.store import get_vector_store
 
@@ -55,11 +56,13 @@ def _run_import(task_id: int, file_path: str, source_file: str) -> None:
         # 1. 加载 + 2. 规范化 + 3. 切分
         doc = load_markdown(file_path)
         meta = normalize(doc.metadata_raw, source_file=source_file, source_path=file_path)
-        if meta.content_type not in CONTENT_TYPES:
-            raise ValueError(f"内容类型无效：{meta.content_type or '缺失'}")
         chunks = split_body(doc.body)
         if not chunks:
             raise ValueError("文档正文为空")
+        if needs_llm_fallback(meta):
+            fill_missing(meta, extract_metadata(_extraction_input(doc)))
+        if meta.content_type not in CONTENT_TYPES:
+            raise ValueError(f"内容类型无效：{meta.content_type or '缺失'}")
         task.total_chunks = len(chunks)
         db.commit()
 
@@ -125,6 +128,12 @@ def _run_import(task_id: int, file_path: str, source_file: str) -> None:
             _discard_vectors(document_id)
     finally:
         db.close()
+
+
+def _extraction_input(doc: LoadedDocument) -> str:
+    """组装交给 LLM 抽取元数据的文档文本。"""
+    fields = "\n".join(f"- {key}：{value}" for key, value in doc.metadata_raw.items())
+    return f"# {doc.title}\n## 元数据\n{fields}\n\n{doc.body}"
 
 
 def _vector_metadata(document: Document, chunk: Chunk) -> dict[str, Any]:

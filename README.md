@@ -37,6 +37,12 @@ APP_ENV=prod scripts/start.sh     # 生产模式，缺少密钥时拒绝启动
 
 优先级从高到低：环境变量、`.env.{APP_ENV}`、`.env`、代码默认值。`APP_ENV` 取 `dev` 或 `prod`。
 
+### 接口鉴权
+
+设置 `API_KEY` 后，`/api/v1/*` 需携带请求头 `X-API-Key`，否则返回 401；`/health` 和 `/metrics` 不受影响。`API_KEY` 为空时不启用，生产环境必填。
+
+前端通过 `VITE_API_KEY` 传入相同的值（如 `VITE_API_KEY=xxx npm run build`）。该值会打进前端代码，只适合内网或受信任的使用者，不能当作用户登录。
+
 ### 前端
 
 ```bash

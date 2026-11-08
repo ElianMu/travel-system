@@ -12,6 +12,15 @@ _TEST_DB = os.environ.get("TEST_MYSQL_DATABASE", "travel_kb_test")
 _TEST_STORE = tempfile.mkdtemp(prefix="jwzh-test-store-")
 os.environ["MYSQL_DATABASE"] = _TEST_DB
 os.environ["VECTOR_STORE_DIR"] = _TEST_STORE
+os.environ["API_KEY"] = ""
+
+
+@pytest.fixture(autouse=True)
+def _no_real_metadata_llm(monkeypatch):
+    """导入测试默认不调用真实 LLM，需要兜底结果的用例自行覆盖。"""
+    from app.services import import_service
+
+    monkeypatch.setattr(import_service, "extract_metadata", lambda _content: {})
 
 
 @pytest.fixture(scope="session")

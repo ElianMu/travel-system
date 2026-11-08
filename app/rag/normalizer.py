@@ -11,6 +11,9 @@ _NAME_KEYS = ("景点名称", "线路名称", "住宿名称", "文档名称", "�
 CONTENT_TYPES = ("景点介绍", "线路推荐", "酒店信息", "美食介绍", "交通指南", "文化民俗")
 _CONTENT_TYPE_ALIASES = {"美食推荐": "美食介绍"}
 
+# 与 documents 表的列宽一致，防止 LLM 输出过长导致写库失败
+_FILLABLE_FIELDS = {"region": 64, "name": 128, "theme": 255}
+
 
 @dataclass
 class NormalizedMetadata:
@@ -58,3 +61,23 @@ def normalize(
         source_file=source_file,
         source_path=source_path,
     )
+
+
+def needs_llm_fallback(meta: NormalizedMetadata) -> bool:
+    """内容类型无效，或地区、名称缺失时需要 LLM 兜底（TDD §7.3）。"""
+    return meta.content_type not in CONTENT_TYPES or not meta.region or not meta.name
+
+
+def fill_missing(meta: NormalizedMetadata, extracted: dict) -> None:
+    """用 LLM 抽取结果补全缺失字段；文档已声明的有效值不被覆盖，非法输出被丢弃。"""
+    if meta.content_type not in CONTENT_TYPES:
+        candidate = extracted.get("content_type")
+        if isinstance(candidate, str):
+            candidate = _CONTENT_TYPE_ALIASES.get(candidate, candidate)
+            if candidate in CONTENT_TYPES:
+                meta.content_type = candidate
+
+    for field, max_length in _FILLABLE_FIELDS.items():
+        value = extracted.get(field)
+        if not getattr(meta, field) and isinstance(value, str):
+            setattr(meta, field, value.strip()[:max_length])
