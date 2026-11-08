@@ -6,12 +6,14 @@ from app.rag.embedder import embed
 
 embed(["预热"])  # 预热 Embedding 模型
 
+from app.models import init_db  # noqa: E402
 from app.services.import_service import get_task, import_document  # noqa: E402
 
 DATA_DIR = "data"
 
 
 def main() -> None:
+    init_db()  # 脚本可能先于服务运行，此时表还不存在
     files = []
     for root, _dirs, names in os.walk(DATA_DIR):
         for name in sorted(names):
