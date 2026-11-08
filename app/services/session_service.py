@@ -20,6 +20,15 @@ def create_session(title: str | None = None) -> dict[str, Any]:
     return result
 
 
+def session_exists(session_id: str) -> bool:
+    """判断会话是否存在。"""
+    db = SessionLocal()
+    try:
+        return db.query(Session.id).filter(Session.session_id == session_id).first() is not None
+    finally:
+        db.close()
+
+
 def list_sessions() -> list[dict[str, Any]]:
     """列出所有会话（按创建时间倒序）。"""
     db = SessionLocal()

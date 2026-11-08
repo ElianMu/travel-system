@@ -23,6 +23,8 @@ def create_session(title: str | None = None) -> dict:
 @router.get("/sessions/{session_id}/messages")
 def get_messages(session_id: str) -> dict:
     """会话消息。"""
+    if not session_service.session_exists(session_id):
+        raise HTTPException(status_code=404, detail="会话不存在")
     return {"messages": session_service.get_messages(session_id)}
 
 

@@ -9,6 +9,7 @@ from app.config import settings
 from app.rag.prompts import QUERY_REWRITE_PROMPT, SYSTEM_PROMPT, build_user_prompt
 
 _client = None
+_EXCERPT_LENGTH = 120
 
 
 @dataclass
@@ -77,6 +78,7 @@ async def stream_generate(
             headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
             json=payload,
         ) as resp:
+            resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if not line.startswith("data: ") or line == "data: [DONE]":
                     continue
@@ -111,6 +113,8 @@ def build_citations(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
         {
             "source_file": hit.get("source_file", ""),
             "heading_path": hit.get("heading_path", ""),
+            "chunk_id": hit.get("id", ""),
+            "excerpt": hit.get("content", "")[:_EXCERPT_LENGTH],
             "score": hit.get("score"),
         }
         for hit in hits
@@ -118,8 +122,13 @@ def build_citations(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _format_context(hits: list[dict[str, Any]]) -> str:
-    """格式化检索片段为参考资料文本。"""
-    parts = [f"[{i}] {hit.get('content', '')}" for i, hit in enumerate(hits, 1)]
+    """格式化检索片段为参考资料文本，带来源以便模型按要求列出引用。"""
+    parts = []
+    for i, hit in enumerate(hits, 1):
+        source = hit.get("source_file", "")
+        heading = hit.get("heading_path", "")
+        label = f"{source}（{heading}）" if heading else source
+        parts.append(f"[{i}] 来源：{label}\n{hit.get('content', '')}")
     return "\n\n".join(parts)
 
 
