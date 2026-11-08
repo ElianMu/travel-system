@@ -1,5 +1,6 @@
 """批量导入 data/ 目录下所有文档（先预热模型，规避原生库冲突）。"""
 import os
+import sys
 
 from app.rag.embedder import embed
 
@@ -35,6 +36,8 @@ def main() -> None:
             print(f"[{i}/{len(files)}] {name} 异常：{exc}")
 
     print(f"\n导入完成：成功 {ok}，失败 {fail}")
+    if fail:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
