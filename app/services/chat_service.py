@@ -14,7 +14,8 @@ from app.services import session_service
 
 logger = logging.getLogger(__name__)
 
-NO_ANSWER_TEXT = "根据现有知识库无法回答。"
+_NO_ANSWER_PREFIX = "根据现有知识库无法回答"
+NO_ANSWER_TEXT = f"{_NO_ANSWER_PREFIX}。"
 
 
 def chat(query: str, session_id: str | None = None, top_k: int | None = None) -> dict[str, Any]:
@@ -27,7 +28,7 @@ def chat(query: str, session_id: str | None = None, top_k: int | None = None) ->
     else:
         # 用改写后的问题生成，否则「那里的美食呢」这类追问模型无从理解
         answer = generator.generate(standalone_query, hits)
-        answer_text, citations = answer.text, answer.citations
+        answer_text, citations = answer.text, _citations_for(answer.text, answer.citations)
 
     _record(session_id, query, answer_text, citations)
     return {"answer": answer_text, "citations": citations}
@@ -49,7 +50,6 @@ async def chat_stream(
             full_text = NO_ANSWER_TEXT
             yield _sse("token", {"delta": full_text})
         else:
-            citations = generator.build_citations(hits)
             async for delta in generator.stream_generate(standalone_query, hits):
                 if not full_text:
                     FIRST_TOKEN_LATENCY.observe(time.perf_counter() - started)
@@ -57,6 +57,7 @@ async def chat_stream(
                 yield _sse("token", {"delta": delta})
             if not full_text:
                 raise RuntimeError("LLM 流式响应为空")
+            citations = _citations_for(full_text, generator.build_citations(hits))
     except Exception:  # noqa: BLE001  流式失败降级为非流式
         logger.warning("流式问答失败，降级为非流式", exc_info=True)
         try:
@@ -74,6 +75,11 @@ async def chat_stream(
     except Exception:  # noqa: BLE001  答案已送达，历史写入失败不影响本次回答
         logger.exception("会话消息写入失败 session_id=%s", session_id)
     yield _sse("done", {"citations": citations})
+
+
+def _citations_for(answer: str, citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """模型拒答时不附引用，避免把无关片段展示为答案依据。"""
+    return [] if answer.startswith(_NO_ANSWER_PREFIX) else citations
 
 
 def _maybe_rewrite(query: str, session_id: str | None) -> str:

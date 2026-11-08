@@ -6,14 +6,16 @@ import os
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """全局配置。"""
 
+    # 优先级：环境变量 > .env.{APP_ENV} > .env > 代码默认值
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", f".env.{os.getenv('APP_ENV', 'dev')}"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -52,6 +54,13 @@ class Settings(BaseSettings):
     retrieve_top_k: int = 5
     # 低于该相似度视为本地召回不足。样例数据实测：相关问题 ≥0.62，无关问题 ≤0.49
     retrieve_min_score: float = 0.55
+
+    @model_validator(mode="after")
+    def _require_secrets_in_prod(self) -> "Settings":
+        """生产环境缺少密钥时启动即失败，而不是等到第一次问答才报错。"""
+        if self.app_env == "prod" and not self.deepseek_api_key:
+            raise ValueError("生产环境必须通过环境变量提供 DEEPSEEK_API_KEY")
+        return self
 
     @property
     def vector_index_file(self) -> str:

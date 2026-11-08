@@ -110,6 +110,10 @@ class TestChat:
         assert body["citations"] == []
         assert llm.requests == []
 
+    def test_refusal_has_no_citations(self, llm):
+        llm.answer = "根据现有知识库无法回答。"
+        assert client.post("/api/v1/chat", json={"query": QUESTION}).json()["citations"] == []
+
     def test_query_length_limited(self):
         assert client.post("/api/v1/chat", json={"query": "问" * 2001}).status_code == 422
         assert client.post("/api/v1/chat", json={"query": ""}).status_code == 422

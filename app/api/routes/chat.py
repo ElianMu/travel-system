@@ -1,6 +1,7 @@
 """知识问答接口。"""
 from __future__ import annotations
 
+import anyio
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
@@ -11,6 +12,8 @@ from app.services import chat_service, session_service
 router = APIRouter(tags=["chat"])
 
 MAX_QUERY_LENGTH = 2000
+# 停机时留给在途流式回答的时间，须小于 uvicorn 的 --timeout-graceful-shutdown（30 秒）
+_SHUTDOWN_GRACE_SECONDS = 25
 
 
 class ChatRequest(BaseModel):
@@ -34,4 +37,8 @@ def chat(req: ChatRequest) -> dict:
 async def chat_stream(req: ChatRequest) -> EventSourceResponse:
     """问答流式（SSE）。"""
     await run_in_threadpool(_ensure_session_exists, req.session_id)
-    return EventSourceResponse(chat_service.chat_stream(req.query, req.session_id))
+    return EventSourceResponse(
+        chat_service.chat_stream(req.query, req.session_id),
+        shutdown_event=anyio.Event(),
+        shutdown_grace_period=_SHUTDOWN_GRACE_SECONDS,
+    )
