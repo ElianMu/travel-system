@@ -26,6 +26,7 @@ export async function chatStream({ query, sessionId }, onToken, onCitations, onF
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, session_id: sessionId }),
   })
+  if (!resp.ok) throw new Error(`流式接口返回 ${resp.status}`)
   const reader = resp.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -41,6 +42,7 @@ export async function chatStream({ query, sessionId }, onToken, onCitations, onF
       if (data.delta != null) onToken(data.delta)
       else if (data.citations != null) onCitations(data.citations)
       else if (data.answer != null) onFallbackAnswer(data.answer)
+      else if (data.message != null) throw new Error(data.message)
     }
   }
 }

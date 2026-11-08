@@ -21,88 +21,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { chat, chatStream, listSessions, createSession, getMessages, deleteSession } from '../api'
+import { onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import ChatPanel from '../components/ChatPanel.vue'
+import { useChatStore } from '../store/chat'
 
-const sessions = ref([])
-const sessionId = ref(null)
-const messages = ref([])
-const isStreaming = ref(false)
-
-async function loadSessions() {
-  const data = await listSessions()
-  sessions.value = data.sessions || []
-}
-
-async function newSession() {
-  // 新建空白会话：清空当前，输入第一个问题后才真正创建（豆包式交互）
-  sessionId.value = null
-  messages.value = []
-}
-
-async function selectSession(id) {
-  if (isStreaming.value) return
-  sessionId.value = id
-  const data = await getMessages(id)
-  messages.value = (data.messages || []).map((m) => ({
-    role: m.role,
-    content: m.content,
-    citations: m.citations || [],
-  }))
-}
-
-async function removeSession(id) {
-  await deleteSession(id)
-  if (sessionId.value === id) {
-    sessionId.value = null
-    messages.value = []
-  }
-  await loadSessions()
-}
-
-async function send(query) {
-  // 无当前会话时，用第一个问题作为标题创建会话
-  if (!sessionId.value) {
-    const title = query.length > 20 ? query.slice(0, 20) + '…' : query
-    const s = await createSession(title)
-    sessionId.value = s.session_id
-    await loadSessions()
-  }
-
-  messages.value.push({ role: 'user', content: query })
-  messages.value.push({ role: 'assistant', content: '', citations: [] })
-  // 从响应式数组取回代理对象，避免修改原始对象导致不渲染
-  const assistant = messages.value[messages.value.length - 1]
-
-  isStreaming.value = true
-  try {
-    await chatStream(
-      { query, sessionId: sessionId.value },
-      (delta) => {
-        assistant.content += delta
-      },
-      (citations) => {
-        assistant.citations = citations
-      },
-      (answer) => {
-        assistant.content = answer
-      },
-    )
-  } catch (e) {
-    // 流式失败，回退非流式
-    try {
-      const data = await chat({ query, session_id: sessionId.value })
-      assistant.content = data.answer
-      assistant.citations = data.citations || []
-    } catch (e2) {
-      ElMessage.error('问答失败')
-    }
-  } finally {
-    isStreaming.value = false
-  }
-}
+const chatStore = useChatStore()
+const { sessions, sessionId, messages, isStreaming } = storeToRefs(chatStore)
+const { loadSessions, newSession, selectSession, removeSession, send } = chatStore
 
 onMounted(loadSessions)
 </script>
